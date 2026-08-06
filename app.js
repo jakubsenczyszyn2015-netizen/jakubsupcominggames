@@ -45,11 +45,32 @@ const io = new IntersectionObserver(entries => {
 /* ---------------- load data ---------------- */
 let projects = [];
 
+// Accept "example.com/thing" as well as a full URL.
+function normaliseUrl(u) {
+  u = (u || '').trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^(javascript|data|vbscript):/i.test(u)) return '';
+  return 'https://' + u.replace(/^\/+/, '');
+}
+
+// Some clients store the body with HTML entities (&quot; / &#34;) instead of
+// raw quotes, which breaks JSON.parse — decode before parsing.
+function unentity(s) {
+  const t = document.createElement('textarea');
+  t.innerHTML = s;
+  return t.value;
+}
+
 function parseIssue(issue) {
   const body = issue.body || '';
-  let data = {};
-  const fence = body.match(/```json\s*([\s\S]*?)```/i);
-  try { data = JSON.parse(fence ? fence[1] : body); } catch (_) { data = {}; }
+  let data = null;
+  const fence = body.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const raw = fence ? fence[1] : body;
+  for (const candidate of [raw, unentity(raw)]) {
+    try { data = JSON.parse(candidate); break; } catch (_) { /* try next */ }
+  }
+  if (!data || typeof data !== 'object') return null;
   const release = data.release ? new Date(data.release) : null;
   return {
     id: issue.number,
@@ -58,7 +79,7 @@ function parseIssue(issue) {
     desc: data.desc || '',
     kind: (data.kind || 'game').toLowerCase(),
     action: (data.action || 'play').toLowerCase(),
-    link: data.url || '',
+    link: normaliseUrl(data.url),
     release: release && !isNaN(release) ? release : null
   };
 }
@@ -66,12 +87,14 @@ function parseIssue(issue) {
 async function load() {
   const state = $('#state');
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&labels=${LABEL}&per_page=100`, {
+    // Every open issue is considered; anything without a valid JSON block is
+    // ignored, so a missing "game" label never hides a project.
+    const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`, {
       headers: { Accept: 'application/vnd.github+json' }
     });
     if (!res.ok) throw new Error('GitHub API returned ' + res.status);
     const issues = (await res.json()).filter(i => !i.pull_request);
-    projects = issues.map(parseIssue).sort((a, b) => {
+    projects = issues.map(parseIssue).filter(Boolean).sort((a, b) => {
       if (!a.release) return 1;
       if (!b.release) return -1;
       return a.release - b.release;
@@ -87,6 +110,7 @@ async function load() {
 function render() {
   const grid = $('#grid'), state = $('#state');
   if (!projects.length) {
+    state.style.display = '';
     state.innerHTML = 'No projects yet. Add one from the <b>Admin</b> tab.';
     grid.innerHTML = '';
     return;
