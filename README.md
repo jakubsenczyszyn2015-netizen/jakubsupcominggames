@@ -20,7 +20,8 @@
 | `action` | `play` (open link) or `download` |
 | `desc` | short description on the card |
 
-Open issues with the `game` label show up on the site. Close an issue to remove it.
+Any open issue whose body contains a valid JSON block shows up on the site — the `game`
+label is optional tidiness, not a requirement. Close an issue to remove it from the site.
 Until the release time the button stays locked; at zero it unlocks automatically.
 
 ## Admin tab
