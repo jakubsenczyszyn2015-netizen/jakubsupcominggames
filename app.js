@@ -45,6 +45,14 @@ const io = new IntersectionObserver(entries => {
 /* ---------------- load data ---------------- */
 let projects = [];
 
+function decodeLink(b64) {
+  if (!b64) return '';
+  try { return decodeURIComponent(escape(atob(b64))); } catch (_) { return ''; }
+}
+function encodeLink(url) {
+  return btoa(unescape(encodeURIComponent(url)));
+}
+
 // Accept "example.com/thing" as well as a full URL.
 function normaliseUrl(u) {
   u = (u || '').trim();
@@ -79,20 +87,30 @@ function parseIssue(issue) {
     desc: data.desc || '',
     kind: (data.kind || 'game').toLowerCase(),
     action: (data.action || 'play').toLowerCase(),
-    link: normaliseUrl(data.url),
+    // url_b64 keeps the link out of the issue as readable text; plain url still works.
+    link: normaliseUrl(data.url || decodeLink(data.url_b64)),
     release: release && !isNaN(release) ? release : null
   };
 }
 
+let etag = null;
+
 async function load() {
   const state = $('#state');
   try {
-    // Every open issue is considered; anything without a valid JSON block is
-    // ignored, so a missing "game" label never hides a project.
-    const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`, {
-      headers: { Accept: 'application/vnd.github+json' }
-    });
+    // Only open issues are requested, so closing an issue removes its card on
+    // the next poll. Anything without a valid JSON block is ignored, so a
+    // missing "game" label never hides a project.
+    const headers = { Accept: 'application/vnd.github+json' };
+    // Conditional request: an unchanged list comes back as 304, which GitHub
+    // does not count against the unauthenticated rate limit.
+    if (etag) headers['If-None-Match'] = etag;
+
+    const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`, { headers });
+    if (res.status === 304) return;               // nothing changed
     if (!res.ok) throw new Error('GitHub API returned ' + res.status);
+    etag = res.headers.get('ETag');
+
     const issues = (await res.json()).filter(i => !i.pull_request);
     projects = issues.map(parseIssue).filter(Boolean).sort((a, b) => {
       if (!a.release) return 1;
@@ -102,10 +120,17 @@ async function load() {
     render();
     renderAdminList();
   } catch (err) {
+    // Keep whatever is already on screen if a later poll fails.
+    if (projects.length) return;
+    state.style.display = '';
     state.innerHTML = `Couldn't load projects — ${err.message}.<br><br>
       <a class="btn ghost" href="https://github.com/${REPO}/issues">Open the issues on GitHub</a>`;
   }
 }
+
+// Refresh every 5 seconds, but only while the tab is actually being looked at.
+setInterval(() => { if (!document.hidden) load(); }, 5000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 
 function render() {
   const grid = $('#grid'), state = $('#state');
@@ -127,7 +152,7 @@ function render() {
       </div>
       <div class="row">
         ${p.link
-          ? `<a class="btn" data-link="${esc(p.link)}" href="${esc(p.link)}" target="_blank" rel="noopener">${label}</a>`
+          ? `<a class="btn" data-play="${p.id}" data-label="${label}">${label}</a>`
           : `<span class="btn" disabled>Link coming soon</span>`}
         <a class="btn ghost" href="${p.url}" target="_blank" rel="noopener">Details</a>
       </div>
@@ -146,7 +171,7 @@ function tick() {
   $$('.cd').forEach(cd => {
     const card = cd.closest('.card');
     const iso = cd.dataset.cd;
-    const btn = card.querySelector('[data-link]');
+    const btn = card.querySelector('[data-play]');
     if (!iso) { cd.innerHTML = '<div style="grid-column:1/-1"><b>TBA</b><span>release date</span></div>'; lock(btn, true); return; }
     let diff = new Date(iso) - Date.now();
     if (diff <= 0) {
@@ -167,6 +192,8 @@ function tick() {
   });
 }
 
+// The href is only written into the DOM once the countdown has finished, so the
+// link is not sitting in the page source while the project is still unreleased.
 function lock(btn, locked) {
   if (!btn) return;
   if (locked) {
@@ -174,8 +201,13 @@ function lock(btn, locked) {
     btn.removeAttribute('href');
     btn.textContent = '🔒 Locked until release';
   } else if (!btn.hasAttribute('href')) {
+    const p = projects.find(x => String(x.id) === btn.dataset.play);
+    if (!p || !p.link) return;
     btn.removeAttribute('disabled');
-    btn.setAttribute('href', btn.dataset.link);
+    btn.href = p.link;
+    btn.target = '_blank';
+    btn.rel = 'noopener';
+    btn.textContent = btn.dataset.label;
   }
 }
 setInterval(tick, 1000);
@@ -212,10 +244,12 @@ $('#make').addEventListener('click', () => {
     return;
   }
   msg.className = 'msg';
+  const url = normaliseUrl($('#f-url').value);
   const payload = {
     kind: $('#f-kind').value,
     release: new Date(date).toISOString(),
-    url: $('#f-url').value.trim(),
+    // Stored encoded so the link is not readable at a glance in the issue.
+    url_b64: url ? encodeLink(url) : '',
     action: $('#f-action').value,
     desc: $('#f-desc').value.trim()
   };
