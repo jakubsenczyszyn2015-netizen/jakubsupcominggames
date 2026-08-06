@@ -25,7 +25,7 @@ Until the release time the button stays locked; at zero it unlocks automatically
 
 ## Admin tab
 
-Code: `jfbbb123`. It gates the UI only — anyone reading the source can see it, so treat it as
+Code: `***`. It gates the UI only — anyone reading the source can see it, so treat it as
 convenience, not security. The real protection is GitHub: creating or editing an issue requires
 write access to this repo.
 
