@@ -42,6 +42,14 @@ const io = new IntersectionObserver(entries => {
   entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
 }, { threshold: .12 });
 
+/* ---------------- clock ----------------
+   Countdowns must not depend on the visitor's own clock — a device running a few
+   minutes fast or slow made the same timer read differently for different people.
+   Every GitHub response carries a Date header, so the offset between that and the
+   local clock is measured once per poll and applied to every countdown. */
+let skew = 0;                       // serverTime - localTime, in ms
+function now() { return Date.now() + skew; }
+
 /* ---------------- load data ---------------- */
 let projects = [];
 
@@ -80,6 +88,18 @@ function parseIssue(issue) {
   }
   if (!data || typeof data !== 'object') return null;
   const release = data.release ? new Date(data.release) : null;
+
+  // Updates: newest first, each { version, date, notes }. An update dated in the
+  // future is treated as an upcoming update and gets its own countdown.
+  const updates = (Array.isArray(data.updates) ? data.updates : [])
+    .map(u => ({
+      version: String(u.version || '').trim(),
+      date: u.date && !isNaN(new Date(u.date)) ? new Date(u.date) : null,
+      notes: String(u.notes || '').trim()
+    }))
+    .filter(u => u.version || u.notes)
+    .sort((a, b) => (b.date || 0) - (a.date || 0));
+
   return {
     id: issue.number,
     title: issue.title,
@@ -89,11 +109,30 @@ function parseIssue(issue) {
     action: (data.action || 'play').toLowerCase(),
     // url_b64 keeps the link out of the issue as readable text; plain url still works.
     link: normaliseUrl(data.url || decodeLink(data.url_b64)),
-    release: release && !isNaN(release) ? release : null
+    release: release && !isNaN(release) ? release : null,
+    updates,
+    hype: issue.reactions ? issue.reactions.total_count : 0
+  };
+}
+
+// A project's live status, derived from the corrected clock.
+function statusOf(p) {
+  const t = now();
+  const live = p.release && p.release <= t;
+  const shipped = p.updates.filter(u => u.date && u.date <= t);
+  const upcoming = p.updates.filter(u => u.date && u.date > t).sort((a, b) => a.date - b.date);
+  return {
+    live,
+    latest: shipped[0] || null,             // most recent shipped update
+    next: upcoming[0] || null,              // next update still to land
+    // What the countdown on this card is aiming at.
+    target: !live ? p.release : (upcoming[0] ? upcoming[0].date : null),
+    targetLabel: !live ? 'release' : 'update'
   };
 }
 
 let etag = null;
+let bootstrapped = false;
 
 async function load() {
   const state = $('#state');
@@ -107,6 +146,13 @@ async function load() {
     if (etag) headers['If-None-Match'] = etag;
 
     const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`, { headers });
+    // Re-sync the clock on every response, including a 304.
+    const serverDate = res.headers.get('Date');
+    if (serverDate) {
+      const t = new Date(serverDate).getTime();
+      if (!isNaN(t)) skew = t - Date.now();
+    }
+
     if (res.status === 304) return;               // nothing changed
     if (!res.ok) throw new Error('GitHub API returned ' + res.status);
     etag = res.headers.get('ETag');
@@ -117,8 +163,10 @@ async function load() {
       if (!b.release) return -1;
       return a.release - b.release;
     });
+    detectUpdates();
     render();
     renderAdminList();
+    bootstrapped = true;      // later polls may celebrate; the first one may not
   } catch (err) {
     // Keep whatever is already on screen if a later poll fails.
     if (projects.length) return;
@@ -143,23 +191,55 @@ function render() {
   state.style.display = 'none';
   grid.innerHTML = projects.map(p => {
     const label = p.action === 'download' ? 'Download ⬇' : 'Open / Play ↗';
+    const st = statusOf(p);
+    const watching = isWatched(p.id);
+
     return `<article class="card" data-id="${p.id}">
-      <span class="kind">${p.kind === 'site' ? 'Site' : 'Game'}</span>
+      <div class="tagrow">
+        <span class="kind">${p.kind === 'site' ? 'Site' : 'Game'}</span>
+        ${st.latest && st.latest.version ? `<span class="kind ver">v${esc(st.latest.version)}</span>` : ''}
+        ${st.live ? '<span class="kind live">Live</span>' : ''}
+      </div>
       <h3>${esc(p.title)}</h3>
       <p class="desc">${esc(p.desc)}</p>
-      <div class="cd" data-cd="${p.release ? p.release.toISOString() : ''}">
+
+      <div class="cd" data-cd="${st.target ? st.target.toISOString() : ''}" data-for="${st.targetLabel}">
         ${['Days', 'Hours', 'Mins', 'Secs'].map(u => `<div><b>--</b><span>${u}</span></div>`).join('')}
       </div>
+
+      ${st.next ? `<p class="cdnote">Next update${st.next.version ? ` · v${esc(st.next.version)}` : ''}</p>` : ''}
+      ${renderUpdates(p, st)}
+
       <div class="row">
         ${p.link
           ? `<a class="btn" data-play="${p.id}" data-label="${label}">${label}</a>`
           : `<span class="btn" disabled>Link coming soon</span>`}
-        <a class="btn ghost" href="${p.url}" target="_blank" rel="noopener">Details</a>
+        <button class="btn hype${watching ? ' on' : ''}" data-hype="${p.id}">
+          <span class="flame">🔥</span><span class="hlabel">${watching ? 'Hyped — you’ll be told' : 'Hype &amp; notify me'}</span>
+        </button>
+        <a class="btn ghost" href="${p.url}" target="_blank" rel="noopener">Details${p.hype ? ` · 🔥${p.hype}` : ''}</a>
       </div>
     </article>`;
   }).join('');
   $$('.card', grid).forEach(c => io.observe(c));
+  $$('[data-hype]', grid).forEach(b => b.addEventListener('click', () => toggleWatch(+b.dataset.hype, b)));
   tick();
+}
+
+// Changelog for anything already shipped, newest first.
+function renderUpdates(p, st) {
+  const shipped = p.updates.filter(u => u.date && u.date <= now());
+  if (!shipped.length) return '';
+  const items = shipped.map(u => `
+    <li>
+      <b>${u.version ? 'v' + esc(u.version) : 'Update'}</b>
+      <time>${u.date.toLocaleDateString()}</time>
+      ${u.notes ? `<p>${esc(u.notes)}</p>` : ''}
+    </li>`).join('');
+  return `<details class="updates"${st.live ? ' open' : ''}>
+      <summary>What's new <span class="count">${shipped.length}</span></summary>
+      <ul>${items}</ul>
+    </details>`;
 }
 
 function esc(s) {
@@ -172,14 +252,36 @@ function tick() {
     const card = cd.closest('.card');
     const iso = cd.dataset.cd;
     const btn = card.querySelector('[data-play]');
-    if (!iso) { cd.innerHTML = '<div style="grid-column:1/-1"><b>TBA</b><span>release date</span></div>'; lock(btn, true); return; }
-    let diff = new Date(iso) - Date.now();
+    const id = +card.dataset.id;
+    const forWhat = cd.dataset.for;
+    // Already-released projects stay playable even while counting down to an update.
+    const live = card.querySelector('.kind.live');
+
+    if (!iso) {
+      // No date to count to: either unannounced, or live with no update queued.
+      if (live) {
+        cd.outerHTML = '<div class="released">✦ Out now — go play it</div>';
+      } else if (!cd.dataset.tba) {
+        cd.dataset.tba = '1';       // write once, otherwise this rebuilds every second
+        cd.innerHTML = '<div style="grid-column:1/-1"><b>TBA</b><span>release date</span></div>';
+      }
+      lock(btn, !live);
+      return;
+    }
+
+    let diff = new Date(iso) - now();
     if (diff <= 0) {
-      cd.outerHTML = '<div class="released">✦ Out now — go play it</div>';
+      if (forWhat === 'update') {
+        cd.outerHTML = '<div class="released">✦ Update out now</div>';
+        celebrate(id, 'update');
+      } else {
+        cd.outerHTML = '<div class="released">✦ Out now — go play it</div>';
+        celebrate(id, 'release');
+      }
       lock(btn, false);
       return;
     }
-    lock(btn, true);
+    lock(btn, !live);
     const d = Math.floor(diff / 864e5);
     const h = Math.floor(diff / 36e5) % 24;
     const m = Math.floor(diff / 6e4) % 60;
@@ -211,6 +313,155 @@ function lock(btn, locked) {
   }
 }
 setInterval(tick, 1000);
+
+/* ---------------- hype & notifications ----------------
+   One button per card: it marks the project as hyped and subscribes you to a
+   notification. Subscriptions live in this browser's localStorage — there is no
+   server, so notifications arrive while the site is open in a tab, not by email
+   or push when it is closed. The 🔥 count next to Details is the issue's GitHub
+   reaction total, which is why adding to it happens on the issue itself. */
+const WATCH_KEY = 'watching';
+const SEEN_KEY = 'seen';
+
+const readSet = k => { try { return new Set(JSON.parse(localStorage.getItem(k)) || []); } catch (_) { return new Set(); } };
+const writeSet = (k, s) => localStorage.setItem(k, JSON.stringify([...s]));
+
+const isWatched = id => readSet(WATCH_KEY).has(id);
+
+async function toggleWatch(id, btn) {
+  const set = readSet(WATCH_KEY);
+  const label = btn.querySelector('.hlabel');
+
+  if (set.has(id)) {
+    set.delete(id);
+    btn.classList.remove('on');
+    label.textContent = 'Hype & notify me';
+  } else {
+    set.add(id);
+    btn.classList.add('on');
+    btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
+    burst(btn);                                    // little flame puff on click
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch (_) { /* ignore */ }
+    }
+    const ok = 'Notification' in window && Notification.permission === 'granted';
+    label.textContent = ok ? 'Hyped — you’ll be told' : 'Hyped';
+  }
+  writeSet(WATCH_KEY, set);
+}
+
+// Fires once per project per event, remembered across reloads.
+function celebrate(id, kind, versionKey) {
+  if (versionKey === undefined) {
+    // Resolve the same key tick() and detectUpdates() would produce.
+    const p = projects.find(x => x.id === id);
+    const latest = p && statusOf(p).latest;
+    versionKey = kind === 'update' && latest ? (latest.version || String(+latest.date)) : '';
+  }
+  const key = `${id}:${kind}:${versionKey || ''}`;
+  const seen = readSet(SEEN_KEY);
+  if (seen.has(key)) return;
+  seen.add(key);
+  writeSet(SEEN_KEY, seen);
+
+  // First visit: record the world as it is without throwing confetti for things
+  // that shipped long before this browser ever loaded the page.
+  if (!bootstrapped) return;
+
+  const p = projects.find(x => x.id === id);
+  const name = p ? p.title : 'A project';
+  confetti();
+  if (isWatched(id) && 'Notification' in window && Notification.permission === 'granted') {
+    const body = kind === 'update' ? 'A new update just went live.' : 'It just released — go play it.';
+    try { new Notification(`${name} — ${kind === 'update' ? 'updated' : 'out now'}`, { body, icon: 'assets/favicon.svg' }); } catch (_) { /* ignore */ }
+  }
+}
+
+// Detect updates that appeared in the issue data between two polls.
+function detectUpdates() {
+  projects.forEach(p => {
+    const st = statusOf(p);
+    if (st.live) celebrate(p.id, 'release', '');
+    if (st.latest) celebrate(p.id, 'update', st.latest.version || String(+st.latest.date));
+  });
+}
+
+/* ---------------- confetti ----------------
+   Launches from the bottom edge of the screen and arcs upward. */
+let cvs, ctx, bits = [], raf = null;
+
+function confetti() {
+  if (!cvs) {
+    cvs = document.createElement('canvas');
+    cvs.id = 'confetti';
+    document.body.appendChild(cvs);
+    ctx = cvs.getContext('2d');
+    addEventListener('resize', sizeCanvas);
+  }
+  sizeCanvas();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const colours = ['#ff2b3d', '#b3001b', '#ffffff', '#ff7a86', '#1a1a1f'];
+  for (let i = 0; i < 140; i++) {
+    bits.push({
+      x: Math.random() * cvs.width,
+      y: cvs.height + Math.random() * 40,
+      vx: (Math.random() - .5) * 5,
+      vy: -(11 + Math.random() * 9),            // upward launch
+      size: 5 + Math.random() * 7,
+      rot: Math.random() * Math.PI,
+      spin: (Math.random() - .5) * .3,
+      colour: colours[(Math.random() * colours.length) | 0],
+      life: 0
+    });
+  }
+  if (!raf) raf = requestAnimationFrame(drawConfetti);
+}
+
+function sizeCanvas() {
+  if (!cvs) return;
+  cvs.width = innerWidth;
+  cvs.height = innerHeight;
+}
+
+function drawConfetti() {
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  bits = bits.filter(b => b.life < 260 && b.y < cvs.height + 60);
+  bits.forEach(b => {
+    b.life++;
+    b.vy += .28;                                 // gravity
+    b.vx *= .995;
+    b.x += b.vx;
+    b.y += b.vy;
+    b.rot += b.spin;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.rot);
+    ctx.globalAlpha = Math.max(0, 1 - b.life / 260);
+    ctx.fillStyle = b.colour;
+    ctx.fillRect(-b.size / 2, -b.size / 2, b.size, b.size * .6);
+    ctx.restore();
+  });
+  if (bits.length) { raf = requestAnimationFrame(drawConfetti); }
+  else { ctx.clearRect(0, 0, cvs.width, cvs.height); raf = null; }
+}
+
+// Small puff of flames out of the hype button.
+function burst(btn) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = btn.getBoundingClientRect();
+  for (let i = 0; i < 8; i++) {
+    const s = document.createElement('span');
+    s.className = 'spark';
+    s.textContent = '🔥';
+    s.style.left = (r.left + r.width / 2) + 'px';
+    s.style.top = (r.top + r.height / 2) + 'px';
+    s.style.setProperty('--dx', ((Math.random() - .5) * 120) + 'px');
+    s.style.setProperty('--dy', (-40 - Math.random() * 70) + 'px');
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 900);
+  }
+}
 
 /* ---------------- admin ---------------- */
 const lockBox = $('#lock');
@@ -253,6 +504,17 @@ $('#make').addEventListener('click', () => {
     action: $('#f-action').value,
     desc: $('#f-desc').value.trim()
   };
+
+  const ver = $('#f-ver').value.trim();
+  const notes = $('#f-notes').value.trim();
+  const udate = $('#f-udate').value;
+  if (ver || notes) {
+    payload.updates = [{
+      version: ver,
+      date: new Date(udate || Date.now()).toISOString(),
+      notes
+    }];
+  }
   const body = '```json\n' + JSON.stringify(payload, null, 2) + '\n```';
   built = { title, body };
   $('#body').textContent = body;
@@ -264,7 +526,7 @@ $('#make').addEventListener('click', () => {
 });
 
 $('#clear').addEventListener('click', () => {
-  ['#f-title', '#f-desc', '#f-date', '#f-url'].forEach(s => $(s).value = '');
+  ['#f-title', '#f-desc', '#f-date', '#f-url', '#f-ver', '#f-notes', '#f-udate'].forEach(s => $(s).value = '');
   $('#result').style.display = 'none';
   built = null;
 });

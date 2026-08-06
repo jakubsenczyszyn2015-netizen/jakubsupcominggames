@@ -20,6 +20,40 @@
 | `url` | plain-text destination link; still read, but visible to anyone browsing the issue |
 | `action` | `play` (open link) or `download` |
 | `desc` | short description on the card |
+| `updates` | array of `{ "version", "date", "notes" }` — the changelog |
+
+## Updates
+
+Add entries to `updates` to announce patches for something already out:
+
+```json
+"updates": [
+  { "version": "1.2", "date": "2026-09-01T12:00:00Z", "notes": "New track, physics fix." },
+  { "version": "1.1", "date": "2026-08-20T12:00:00Z", "notes": "Controller support." }
+]
+```
+
+- Entries dated in the **past** appear in a "What's new" changelog on the card, newest
+  first, and the newest version number shows as a badge next to the title.
+- An entry dated in the **future** turns the card's countdown into a *next update*
+  countdown. The play button stays unlocked the whole time — the project is already out.
+
+## Clock accuracy
+
+Countdowns are driven by the `Date` header on GitHub's responses, not the visitor's own
+clock, so a device running fast or slow shows the same remaining time as everyone else.
+The offset is re-measured on every poll.
+
+## Hype & notifications
+
+Each card has one **🔥 Hype & notify me** button. It marks the project as hyped and asks
+for browser notification permission; when that project releases or ships an update you get
+a notification and confetti launches up from the bottom of the screen.
+
+Subscriptions are stored in `localStorage`, so this is per-browser and only fires while the
+site is open in a tab — there is no server, so no email or push-when-closed. The 🔥 number
+beside *Details* is the issue's GitHub reaction count, which is why adding to it happens on
+the issue itself.
 
 Any open issue whose body contains a valid JSON block shows up on the site — the `game`
 label is optional tidiness, not a requirement. Close an issue and it disappears from the
