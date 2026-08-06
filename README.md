@@ -56,8 +56,12 @@ One **🔥 Hype & notify me** button per card. It adds to a shared counter every
 subscribes you to a notification for that project. When it releases or updates, you get a
 browser notification and confetti launches from the bottom of the screen.
 
+The **Hyped** tab collects everything this browser has hyped, soonest first, with a count on
+the tab itself.
+
 The button toggles: hyping adds one, un-hyping gives it back, so clicking repeatedly cannot
-inflate the number. That is one hype per browser — clearing site data lets the same person
+inflate the number. Un-hyping needs `remove_hype()`, so re-run `schema.sql` if the button
+springs back — the site will say so. That is one hype per browser — clearing site data lets the same person
 hype again. A hard limit would need accounts, or logging a per-visitor identifier.
 
 Subscriptions are per-browser (`localStorage`) and fire while the site is open in a tab. Real

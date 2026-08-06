@@ -195,6 +195,23 @@ header {
 .spark { position: fixed; z-index: 60; pointer-events: none; font-size: 1rem; animation: spark .9s ease-out forwards; }
 @keyframes spark { to { transform: translate(var(--dx), var(--dy)) scale(.4); opacity: 0; } }
 
+.pill { display: inline-block; min-width: 20px; padding: 1px 7px; margin-left: 6px; border-radius: 999px; background: var(--red); color: #fff; font-size: .72rem; font-variant-numeric: tabular-nums; transition: opacity .3s, transform .3s cubic-bezier(.2, .9, .2, 1); }
+.pill.zero { opacity: .35; }
+.tab.active .pill { background: rgba(0, 0, 0, .28); }
+
+#note {
+  position: fixed; left: 50%; bottom: 26px; z-index: 70;
+  transform: translate(-50%, 20px);
+  max-width: min(92vw, 460px);
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--red); border-left-width: 4px;
+  border-radius: 12px; padding: 12px 18px;
+  box-shadow: var(--shadow); font-size: .88rem;
+  opacity: 0; pointer-events: none;
+  transition: opacity .35s, transform .35s cubic-bezier(.2, .9, .2, 1);
+}
+#note.on { opacity: 1; transform: translate(-50%, 0); }
+
 #confetti { position: fixed; inset: 0; z-index: 55; pointer-events: none; }
 
 .cd { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }

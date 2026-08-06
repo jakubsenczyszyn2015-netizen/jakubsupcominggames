@@ -83,43 +83,68 @@ function render() {
     state.style.display = '';
     state.innerHTML = 'No projects yet. Add one from the <b>Admin</b> tab.';
     grid.innerHTML = '';
+    renderHyped();
     return;
   }
   state.style.display = 'none';
+  grid.innerHTML = projects.map(cardHTML).join('');
+  wireCards(grid);
+  renderHyped();
+  tick();
+}
 
-  grid.innerHTML = projects.map(p => {
-    const st = statusOf(p);
-    const label = p.action === 'download' ? 'Download ⬇' : 'Open / Play ↗';
-    const watching = isWatched(p.id);
-    return `<article class="card" data-id="${p.id}">
-      <div class="tagrow">
-        <span class="kind">${p.kind === 'site' ? 'Site' : 'Game'}</span>
-        ${st.latest && st.latest.version ? `<span class="kind ver">v${esc(st.latest.version)}</span>` : ''}
-        ${st.live ? '<span class="kind live">Live</span>' : ''}
-      </div>
-      <h3>${esc(p.title)}</h3>
-      <p class="desc">${esc(p.desc)}</p>
+function cardHTML(p) {
+  const st = statusOf(p);
+  const label = p.action === 'download' ? 'Download ⬇' : 'Open / Play ↗';
+  const watching = isWatched(p.id);
+  return `<article class="card" data-id="${p.id}">
+    <div class="tagrow">
+      <span class="kind">${p.kind === 'site' ? 'Site' : 'Game'}</span>
+      ${st.latest && st.latest.version ? `<span class="kind ver">v${esc(st.latest.version)}</span>` : ''}
+      ${st.live ? '<span class="kind live">Live</span>' : ''}
+    </div>
+    <h3>${esc(p.title)}</h3>
+    <p class="desc">${esc(p.desc)}</p>
 
-      <div class="cd" data-cd="${st.target ? new Date(st.target).toISOString() : ''}" data-for="${st.targetLabel}">
-        ${['Days', 'Hours', 'Mins', 'Secs'].map(u => `<div><b>--</b><span>${u}</span></div>`).join('')}
-      </div>
-      ${st.next ? `<p class="cdnote">Next update${st.next.version ? ` · v${esc(st.next.version)}` : ''}</p>` : ''}
-      ${renderUpdates(p, st)}
+    <div class="cd" data-cd="${st.target ? new Date(st.target).toISOString() : ''}" data-for="${st.targetLabel}">
+      ${['Days', 'Hours', 'Mins', 'Secs'].map(u => `<div><b>--</b><span>${u}</span></div>`).join('')}
+    </div>
+    ${st.next ? `<p class="cdnote">Next update${st.next.version ? ` · v${esc(st.next.version)}` : ''}</p>` : ''}
+    ${renderUpdates(p, st)}
 
-      <div class="row">
-        <a class="btn" data-play="${p.id}" data-label="${label}">${label}</a>
-        <button class="btn hype${watching ? ' on' : ''}" data-hype="${p.id}">
-          <span class="flame">🔥</span>
-          <span class="hcount">${p.hype}</span>
-          <span class="hlabel">${watching ? 'Hyped' : 'Hype &amp; notify me'}</span>
-        </button>
-      </div>
-    </article>`;
-  }).join('');
+    <div class="row">
+      <a class="btn" data-play="${p.id}" data-label="${label}">${label}</a>
+      <button class="btn hype${watching ? ' on' : ''}" data-hype="${p.id}">
+        <span class="flame">🔥</span>
+        <span class="hcount">${p.hype}</span>
+        <span class="hlabel">${watching ? 'Hyped' : 'Hype &amp; notify me'}</span>
+      </button>
+    </div>
+  </article>`;
+}
 
+function wireCards(grid) {
   $$('.card', grid).forEach(c => io.observe(c));
   $$('[data-hype]', grid).forEach(b => b.addEventListener('click', () => hypeClick(b.dataset.hype, b)));
-  tick();
+}
+
+// The Hyped tab: the same cards, filtered to what this browser has hyped.
+function renderHyped() {
+  const grid = $('#hypedgrid'), state = $('#hypedstate');
+  if (!grid) return;
+  const mine = projects.filter(p => isWatched(p.id));
+  $('#hypedcount').textContent = mine.length;
+  $('#hypedcount').classList.toggle('zero', !mine.length);
+
+  if (!mine.length) {
+    state.style.display = '';
+    state.innerHTML = 'Nothing hyped yet. Press <b>🔥 Hype &amp; notify me</b> on anything you want to be told about.';
+    grid.innerHTML = '';
+    return;
+  }
+  state.style.display = 'none';
+  grid.innerHTML = mine.map(cardHTML).join('');
+  wireCards(grid);
 }
 
 function renderUpdates(p, st) {
@@ -135,16 +160,20 @@ function renderUpdates(p, st) {
     </details>`;
 }
 
+// A toast, so a problem is visible whichever tab you are on.
+let noteTimer = null;
 function note(msg) {
   let el = $('#note');
   if (!el) {
-    el = document.createElement('p');
+    el = document.createElement('div');
     el.id = 'note';
-    el.className = 'hint';
-    el.style.cssText = 'text-align:center;margin-top:22px';
-    $('#grid').after(el);
+    document.body.appendChild(el);
   }
-  el.textContent = msg ? '⚠ ' + msg : '';
+  clearTimeout(noteTimer);
+  if (!msg) { el.classList.remove('on'); return; }
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('on');
+  noteTimer = setTimeout(() => el.classList.remove('on'), 6000);
 }
 
 /* ---------------- countdown ---------------- */
@@ -232,46 +261,54 @@ const isWatched = id => readSet(WATCH_KEY).has(id);
    clicks are ignored while a request is in flight. */
 const hyping = new Set();
 
+// The same project can be on screen twice (Games/Sites and Hyped), so update
+// every button for it, not just the one that was clicked.
+function paintHype(id, on, total) {
+  $$(`[data-hype="${id}"]`).forEach(b => {
+    b.classList.toggle('on', on);
+    b.querySelector('.hlabel').textContent = on ? 'Hyped' : 'Hype & notify me';
+    if (total !== undefined) b.querySelector('.hcount').textContent = total;
+  });
+}
+
 async function hypeClick(id, btn) {
   if (hyping.has(id)) return;
   hyping.add(id);
-  btn.disabled = true;
+  $$(`[data-hype="${id}"]`).forEach(b => { b.disabled = true; });
 
   const set = readSet(WATCH_KEY);
-  const label = btn.querySelector('.hlabel');
-  const countEl = btn.querySelector('.hcount');
   const wasOn = set.has(id);
 
-  // Flip the button immediately; the count follows what the database reports.
-  if (wasOn) {
-    set.delete(id);
-    btn.classList.remove('on');
-    label.textContent = 'Hype & notify me';
-  } else {
-    set.add(id);
-    btn.classList.add('on');
+  // Flip immediately; the count follows what the database reports.
+  if (wasOn) set.delete(id); else set.add(id);
+  writeSet(WATCH_KEY, set);
+  paintHype(id, !wasOn);
+  if (!wasOn) {
     btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
     burst(btn);
-    label.textContent = 'Hyped';
   }
-  writeSet(WATCH_KEY, set);
 
   try {
     const total = wasOn ? await removeHype(id) : await addHype(id);
-    countEl.textContent = total;
     const p = projects.find(x => x.id === id);
     if (p) p.hype = total;
-  } catch (_) {
-    // Counter could not be changed — put the subscription back as it was so the
-    // button does not claim a state the database never accepted.
+    paintHype(id, !wasOn, total);
+    renderHyped();
+    note('');
+  } catch (err) {
+    // Put the subscription back so the button never claims a state the database
+    // did not accept — and say why, rather than silently springing back.
     const back = readSet(WATCH_KEY);
     if (wasOn) back.add(id); else back.delete(id);
     writeSet(WATCH_KEY, back);
-    btn.classList.toggle('on', wasOn);
-    label.textContent = wasOn ? 'Hyped' : 'Hype & notify me';
+    paintHype(id, wasOn);
+    renderHyped();
+    note(/function/i.test(err.message)
+      ? 'Hype needs the latest database functions — re-run supabase/schema.sql.'
+      : 'Could not save that: ' + err.message);
   } finally {
     hyping.delete(id);
-    btn.disabled = false;
+    $$(`[data-hype="${id}"]`).forEach(b => { b.disabled = false; });
   }
 
   if (!wasOn && 'Notification' in window && Notification.permission === 'default') {
