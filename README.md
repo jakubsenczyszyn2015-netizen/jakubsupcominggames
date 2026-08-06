@@ -60,7 +60,26 @@ label is optional tidiness, not a requirement. Close an issue and it disappears 
 site within five seconds. Until the release time the button stays locked; at zero it
 unlocks automatically.
 
-### Refresh rate and the rate limit
+## Hosting on Cloudflare Pages
+
+`functions/api/games.js` is a Pages Function served at `/api/games`. It calls GitHub from
+the edge, so the token stays server-side and the response is cached — a thousand visitors
+polling every 5 seconds cost one upstream request per cache TTL, not one each.
+
+Set up:
+
+1. Cloudflare Pages → connect this repo. Build command: none. Output directory: `/`.
+2. Settings → Environment variables → add **`GITHUB_TOKEN`**, a fine-grained token with
+   *Issues: read* on this repo. Optional but recommended: with it the quota is 5,000/hour
+   and the cache TTL drops to 5s; without it the TTL is 45s to stay inside 60/hour.
+3. Redeploy.
+
+The page tries `/api/games` first and polls every 5 seconds when it answers. If the function
+is not deployed — plain static hosting, GitHub Pages — it falls back to calling GitHub
+directly and switches to the conservative schedule below. Both paths work; the proxy is
+simply better.
+
+### Refresh rate and the rate limit (direct fallback only)
 
 GitHub allows **60 unauthenticated API requests per hour per IP**. A flat 5-second poll is
 720/hour — it spends the whole hour's budget in five minutes and everything after that is a

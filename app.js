@@ -132,6 +132,13 @@ function statusOf(p) {
 }
 
 const CACHE_KEY = 'lastIssues';
+const PROXY = '/api/games';           // Cloudflare Pages Function, if deployed
+const DIRECT = `https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`;
+
+// Start optimistic: if /api/games answers, the edge holds the token and does the
+// caching, so the page can poll fast. If it is missing (plain static hosting),
+// fall back to calling GitHub directly on the small unauthenticated quota.
+let viaProxy = true;
 let etag = null;
 let bootstrapped = false;
 
@@ -169,7 +176,14 @@ async function load() {
     // Conditional request: unchanged data comes back as a small 304.
     if (etag) headers['If-None-Match'] = etag;
 
-    const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`, { headers });
+    let res = await fetch(viaProxy ? PROXY : DIRECT, { headers });
+
+    // No function deployed at /api/games — drop to the direct API for good.
+    if (viaProxy && (res.status === 404 || res.status === 405)) {
+      viaProxy = false;
+      etag = null;
+      res = await fetch(DIRECT, { headers: { Accept: 'application/vnd.github+json' } });
+    }
 
     // Re-sync the clock on every response, including a 304.
     const serverDate = res.headers.get('Date');
@@ -190,7 +204,10 @@ async function load() {
         ? `rate limited — GitHub allows 60 requests an hour and this browser has used them all. Back at ${new Date(resetAt).toLocaleTimeString()}.`
         : 'GitHub refused the request (403).');
     }
-    if (!res.ok) throw new Error('GitHub API returned ' + res.status);
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(detail && detail.error ? detail.error : 'GitHub API returned ' + res.status);
+    }
     etag = res.headers.get('ETag');
 
     const issues = (await res.json()).filter(i => !i.pull_request);
@@ -236,6 +253,9 @@ let timer = null;
 
 function nextDelay() {
   const t = now();
+  // Behind the edge function the token and the cache do the rationing, so the
+  // page can simply poll every 5 seconds as intended.
+  if (viaProxy) return FAST;
   if (remaining === 0 && resetAt > t) return Math.min(resetAt - t + 1000, 15 * 60000);
 
   // How close is the nearest countdown to firing?
