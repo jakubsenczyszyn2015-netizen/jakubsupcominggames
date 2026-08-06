@@ -2,7 +2,7 @@
    Data comes from Supabase via data.js; this file renders it. */
 
 import {
-  configured, now, syncClock, fetchProjects, fetchLink, addHype, subscribe,
+  configured, now, syncClock, fetchProjects, fetchLink, addHype, removeHype, subscribe,
   saveGame, addUpdate, deleteGame, adminGetLink
 } from './data.js';
 
@@ -227,33 +227,54 @@ const readSet = k => { try { return new Set(JSON.parse(localStorage.getItem(k)) 
 const writeSet = (k, s) => localStorage.setItem(k, JSON.stringify([...s]));
 const isWatched = id => readSet(WATCH_KEY).has(id);
 
+/* One hype per browser per project. The button toggles, and un-hyping gives the
+   count back, so clicking it repeatedly cannot inflate the number. Overlapping
+   clicks are ignored while a request is in flight. */
+const hyping = new Set();
+
 async function hypeClick(id, btn) {
+  if (hyping.has(id)) return;
+  hyping.add(id);
+  btn.disabled = true;
+
   const set = readSet(WATCH_KEY);
   const label = btn.querySelector('.hlabel');
+  const countEl = btn.querySelector('.hcount');
+  const wasOn = set.has(id);
 
-  if (set.has(id)) {                    // un-hype: stop notifying, keep the count
+  // Flip the button immediately; the count follows what the database reports.
+  if (wasOn) {
     set.delete(id);
     btn.classList.remove('on');
     label.textContent = 'Hype & notify me';
-    writeSet(WATCH_KEY, set);
-    return;
+  } else {
+    set.add(id);
+    btn.classList.add('on');
+    btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
+    burst(btn);
+    label.textContent = 'Hyped';
   }
-
-  set.add(id);
   writeSet(WATCH_KEY, set);
-  btn.classList.add('on');
-  btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
-  burst(btn);
-  label.textContent = 'Hyped';
 
   try {
-    const total = await addHype(id);    // shared counter, everyone sees it
-    btn.querySelector('.hcount').textContent = total;
+    const total = wasOn ? await removeHype(id) : await addHype(id);
+    countEl.textContent = total;
     const p = projects.find(x => x.id === id);
     if (p) p.hype = total;
-  } catch (_) { /* the subscription still stands */ }
+  } catch (_) {
+    // Counter could not be changed — put the subscription back as it was so the
+    // button does not claim a state the database never accepted.
+    const back = readSet(WATCH_KEY);
+    if (wasOn) back.add(id); else back.delete(id);
+    writeSet(WATCH_KEY, back);
+    btn.classList.toggle('on', wasOn);
+    label.textContent = wasOn ? 'Hyped' : 'Hype & notify me';
+  } finally {
+    hyping.delete(id);
+    btn.disabled = false;
+  }
 
-  if ('Notification' in window && Notification.permission === 'default') {
+  if (!wasOn && 'Notification' in window && Notification.permission === 'default') {
     try { await Notification.requestPermission(); } catch (_) { /* ignore */ }
   }
 }
@@ -381,6 +402,20 @@ if (sessionStorage.getItem('admin')) {
   lockBox.style.display = 'none';
   $('#admin').style.display = 'block';
 }
+
+// Leave the admin panel: forget the code and require it again.
+$('#signout').addEventListener('click', () => {
+  code = '';
+  editing = null;
+  sessionStorage.removeItem('admin');
+  resetForm();
+  $('#formmsg').className = 'msg';
+  $('#admin').style.display = 'none';
+  lockBox.style.display = '';
+  $('#lockmsg').classList.remove('show');
+  $('#code').value = '';
+  $('#code').focus();
+});
 
 const localInput = d => {                // Date -> value for datetime-local
   if (!d) return '';

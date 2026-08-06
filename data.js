@@ -79,6 +79,12 @@ export async function addHype(id) {
   return data;
 }
 
+export async function removeHype(id) {
+  const { data, error } = await supa.rpc('remove_hype', { p_game: id });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 /* ---------------- realtime ----------------
    Changes arrive over a websocket the moment they are saved, so there is no
    polling and no rate limit to run into. */

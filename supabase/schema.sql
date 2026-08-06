@@ -96,13 +96,25 @@ end $$;
 create or replace function public.server_now()
 returns timestamptz language sql stable as $$ select now() $$;
 
--- Hype: a shared counter anyone may add to.
+-- Hype: a shared counter. The browser remembers whether it has hyped a given
+-- project and calls add/remove accordingly, so hyping and un-hyping cancel out
+-- instead of ratcheting the number upwards.
 create or replace function public.add_hype(p_game uuid)
 returns integer language plpgsql security definer set search_path = public as $$
 declare
   n integer;
 begin
   update games set hype = hype + 1 where id = p_game returning hype into n;
+  return n;
+end $$;
+
+create or replace function public.remove_hype(p_game uuid)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  n integer;
+begin
+  -- greatest() keeps the counter from going negative if state ever disagrees.
+  update games set hype = greatest(hype - 1, 0) where id = p_game returning hype into n;
   return n;
 end $$;
 
@@ -167,6 +179,7 @@ revoke all on public.game_links, public.app_settings from anon, authenticated;
 grant execute on function public.get_link(uuid)          to anon, authenticated;
 grant execute on function public.server_now()            to anon, authenticated;
 grant execute on function public.add_hype(uuid)          to anon, authenticated;
+grant execute on function public.remove_hype(uuid)       to anon, authenticated;
 grant execute on function public.admin_save_game(text, uuid, text, text, text, timestamptz, text, text) to anon, authenticated;
 grant execute on function public.admin_add_update(text, uuid, text, timestamptz, text) to anon, authenticated;
 grant execute on function public.admin_delete_game(text, uuid) to anon, authenticated;

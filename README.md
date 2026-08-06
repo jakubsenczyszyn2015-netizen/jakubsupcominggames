@@ -56,6 +56,10 @@ One **🔥 Hype & notify me** button per card. It adds to a shared counter every
 subscribes you to a notification for that project. When it releases or updates, you get a
 browser notification and confetti launches from the bottom of the screen.
 
+The button toggles: hyping adds one, un-hyping gives it back, so clicking repeatedly cannot
+inflate the number. That is one hype per browser — clearing site data lets the same person
+hype again. A hard limit would need accounts, or logging a per-visitor identifier.
+
 Subscriptions are per-browser (`localStorage`) and fire while the site is open in a tab. Real
 push-when-closed would need Web Push — a service worker, VAPID keys, and an Edge Function.
 
@@ -63,6 +67,9 @@ push-when-closed would need Web Push — a service worker, VAPID keys, and an Ed
 
 Gated by a code. Publishing, editing, and deleting all go through `admin_*` database functions
 that re-check the code server-side, so the tables cannot be written to directly.
+
+**Lock admin** forgets the code and puts the gate back, so it has to be typed in again. The
+panel also locks itself when the tab is closed — the code is only ever held for the session.
 
 Change the code by updating the `admin_code` row in `app_settings` **and** `ADMIN_CODE` in
 `app.js` — the database is what enforces it, the constant only controls the UI.
