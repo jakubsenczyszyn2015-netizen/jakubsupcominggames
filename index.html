@@ -96,9 +96,9 @@
 
         <label for="f-url">Link (GitHub Pages URL or download URL)</label>
         <input id="f-url" placeholder="https://jakubsenczyszyn2015-netizen.github.io/neon-drift/">
-        <p class="hint" style="margin-top:8px">Stored encoded, so it is not readable plain text in the issue, and it is only
-        written into the page once the countdown ends. That hides it from a casual look — it is not
-        real secrecy. For a link nobody can find early, leave this blank and fill it in at release.</p>
+        <p class="hint" style="margin-top:8px">Kept in a table nobody but this form can read. The site can only ask for it
+        <em>after</em> the countdown ends, and the database refuses before that — so it genuinely cannot be
+        found early.</p>
 
         <h3 style="margin:28px 0 0">Update (optional)</h3>
         <p class="hint">Fill this in to announce a patch for a project that is already out. Give it a
@@ -118,49 +118,26 @@
 
         <div style="height:20px"></div>
         <div class="row">
-          <button class="btn" id="make">Build entry</button>
+          <button class="btn" id="save">Publish</button>
           <button class="btn ghost" id="clear">Clear form</button>
+          <span class="hint" id="editing" style="align-self:center"></span>
         </div>
-        <div class="msg err" id="formmsg"></div>
-      </div>
-
-      <div class="box" id="result" style="margin-top:20px;display:none">
-        <h3 style="margin-top:0">Publish it</h3>
-        <p class="hint">Two ways — pick whichever you like. Option A needs nothing but your GitHub login.</p>
-
-        <h4 style="margin-bottom:6px">A · One click (recommended)</h4>
-        <p class="hint">Opens a pre-filled GitHub issue. Just press <b>Create</b> — the site picks it up on the next refresh.</p>
-        <a class="btn" id="openissue" target="_blank" rel="noopener">Open pre-filled issue ↗</a>
-
-        <h4 style="margin-bottom:6px;margin-top:26px">B · Post directly with a token</h4>
-        <p class="hint">Paste a fine-grained personal access token with <b>Issues: read &amp; write</b> on this repo. It is used for this one request only and is never stored.</p>
-        <input id="token" type="password" placeholder="github_pat_…" autocomplete="off">
-        <div style="height:12px"></div>
-        <div class="row">
-          <button class="btn" id="post">Create issue via API</button>
-          <button class="btn ghost" id="copy">Copy issue body</button>
-        </div>
-        <div class="msg" id="postmsg"></div>
-
-        <h4 style="margin-bottom:6px;margin-top:26px">Issue body</h4>
-        <pre class="out" id="body"></pre>
+        <div class="msg" id="formmsg"></div>
       </div>
 
       <div class="box" id="existing" style="margin-top:20px">
         <h3 style="margin-top:0">Existing entries</h3>
-        <p class="hint">Loaded from GitHub Issues. Use <b>Edit on GitHub</b> to change a countdown date or link, or close the issue to remove the entry from the site.</p>
+        <p class="hint">Everyone's page updates the moment you save — no refresh needed.</p>
         <div id="list"></div>
       </div>
     </div>
   </section>
 
-  <footer>
-    Built by Jakub · data from
-    <a href="https://github.com/jakubsenczyszyn2015-netizen/jakubsupcominggames/issues" style="color:var(--red)">GitHub Issues</a>
-  </footer>
+  <footer>Built by Jakub · live data over Supabase Realtime</footer>
 </div>
 
 <button id="top" title="Back to top">↑</button>
-<script src="app.js"></script>
+<script src="config.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

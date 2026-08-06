@@ -186,6 +186,12 @@ header {
 .btn.pop { animation: pop .45s cubic-bezier(.2, .9, .2, 1); }
 @keyframes pop { 40% { transform: scale(1.12); } 70% { transform: scale(.96); } 100% { transform: scale(1); } }
 
+.btn.hype .hcount { font-variant-numeric: tabular-nums; opacity: .85; }
+.btn.ghost.danger { color: var(--red); }
+.btn.ghost.danger:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+.arow { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+
 .spark { position: fixed; z-index: 60; pointer-events: none; font-size: 1rem; animation: spark .9s ease-out forwards; }
 @keyframes spark { to { transform: translate(var(--dx), var(--dy)) scale(.4); opacity: 0; } }
 
