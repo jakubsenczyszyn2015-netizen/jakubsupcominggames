@@ -1,19 +1,5 @@
 # Jakub's Upcoming Sites/Games
 
-A GitHub Pages site with live countdowns to upcoming games and sites.
-Red / black / white theme, dark mode by default.
-
-**Live:** https://jakubsenczyszyn2015-netizen.github.io/jakubsupcominggames/
-
-## Turning on GitHub Pages
-
-Settings → Pages → Source: **Deploy from a branch** → Branch: `main`, folder `/ (root)` → Save.
-
-## How the data works
-
-Every project is a **GitHub Issue** in this repo with the label `game`.
-The issue title is the project name; the body holds a fenced JSON block:
-
 ````
 ```json
 {
