@@ -60,9 +60,25 @@ label is optional tidiness, not a requirement. Close an issue and it disappears 
 site within five seconds. Until the release time the button stays locked; at zero it
 unlocks automatically.
 
-The site re-reads the issues **every 5 seconds**, using an `ETag` conditional request so an
-unchanged list returns `304` and does not count against GitHub's unauthenticated rate limit.
-Polling pauses while the tab is in the background.
+### Refresh rate and the rate limit
+
+GitHub allows **60 unauthenticated API requests per hour per IP**. A flat 5-second poll is
+720/hour — it spends the whole hour's budget in five minutes and everything after that is a
+`403`. So polling adapts:
+
+| situation | poll every |
+|---|---|
+| within 2 minutes of a release or update landing | 5 seconds |
+| otherwise | 60 seconds |
+| quota exhausted | wait for the reset time GitHub reports |
+
+This costs very little accuracy, because **the countdowns do not depend on polling** — they
+tick locally against the server-corrected clock. Polling only exists to notice new or edited
+issues, and it runs at full speed exactly when a card is about to flip.
+
+The last good response is cached in `localStorage`, so someone arriving while rate limited
+still sees the cards. Polling pauses while the tab is in the background, and a failed poll
+leaves the existing cards up with a small warning line rather than blanking the page.
 
 ### About hiding the link
 

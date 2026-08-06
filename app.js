@@ -131,21 +131,46 @@ function statusOf(p) {
   };
 }
 
+const CACHE_KEY = 'lastIssues';
 let etag = null;
 let bootstrapped = false;
 
+// Render from the last good API response (used when the API is unavailable).
+function loadCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+    if (!Array.isArray(cached) || !cached.length) return false;
+    projects = cached.map(parseIssue).filter(Boolean).sort((a, b) => {
+      if (!a.release) return 1;
+      if (!b.release) return -1;
+      return a.release - b.release;
+    });
+    if (!projects.length) return false;
+    detectUpdates();
+    render();
+    renderAdminList();
+    bootstrapped = true;
+    return true;
+  } catch (_) { return false; }
+}
+let remaining = null;      // x-ratelimit-remaining from the last response
+let resetAt = 0;           // epoch ms when the quota refills
+let inFlight = false;
+
 async function load() {
   const state = $('#state');
+  if (inFlight) return;
+  inFlight = true;
   try {
     // Only open issues are requested, so closing an issue removes its card on
     // the next poll. Anything without a valid JSON block is ignored, so a
     // missing "game" label never hides a project.
     const headers = { Accept: 'application/vnd.github+json' };
-    // Conditional request: an unchanged list comes back as 304, which GitHub
-    // does not count against the unauthenticated rate limit.
+    // Conditional request: unchanged data comes back as a small 304.
     if (etag) headers['If-None-Match'] = etag;
 
     const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`, { headers });
+
     // Re-sync the clock on every response, including a 304.
     const serverDate = res.headers.get('Date');
     if (serverDate) {
@@ -153,7 +178,18 @@ async function load() {
       if (!isNaN(t)) skew = t - Date.now();
     }
 
+    // Track the quota so polling can slow down before GitHub starts refusing.
+    const rem = res.headers.get('X-RateLimit-Remaining');
+    const rst = res.headers.get('X-RateLimit-Reset');
+    if (rem !== null) remaining = +rem;
+    if (rst !== null) resetAt = +rst * 1000;
+
     if (res.status === 304) return;               // nothing changed
+    if (res.status === 403 || res.status === 429) {
+      throw new Error(remaining === 0
+        ? `rate limited — GitHub allows 60 requests an hour and this browser has used them all. Back at ${new Date(resetAt).toLocaleTimeString()}.`
+        : 'GitHub refused the request (403).');
+    }
     if (!res.ok) throw new Error('GitHub API returned ' + res.status);
     etag = res.headers.get('ETag');
 
@@ -163,22 +199,75 @@ async function load() {
       if (!b.release) return -1;
       return a.release - b.release;
     });
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(issues)); } catch (_) { /* quota */ }
+    note('');
     detectUpdates();
     render();
     renderAdminList();
     bootstrapped = true;      // later polls may celebrate; the first one may not
   } catch (err) {
-    // Keep whatever is already on screen if a later poll fails.
-    if (projects.length) return;
+    // Keep whatever is already on screen if a later poll fails — the countdowns
+    // keep running locally, so a throttled poll is not a broken page.
+    if (projects.length) { note(err.message); return; }
+    // Nothing on screen yet: fall back to the last good response so a visitor
+    // who arrives while rate limited still sees the cards and countdowns.
+    if (loadCache()) { note(err.message + ' Showing the last saved copy.'); return; }
     state.style.display = '';
-    state.innerHTML = `Couldn't load projects — ${err.message}.<br><br>
+    state.innerHTML = `Couldn't load projects — ${err.message}<br><br>
       <a class="btn ghost" href="https://github.com/${REPO}/issues">Open the issues on GitHub</a>`;
+  } finally {
+    inFlight = false;
+    schedule();
   }
 }
 
-// Refresh every 5 seconds, but only while the tab is actually being looked at.
-setInterval(() => { if (!document.hidden) load(); }, 5000);
+/* ---------------- polling schedule ----------------
+   GitHub allows 60 unauthenticated API requests per hour per IP, so a flat
+   5-second poll (720/hour) exhausts the quota in five minutes and everything
+   after that is a 403. It also is not needed: the countdowns tick locally off
+   the corrected clock, so polling only exists to notice new or edited issues.
+
+   So: poll every 5 seconds when it actually matters — the last two minutes
+   before something is due to release or update, when the page needs to flip
+   promptly — and back off to once a minute the rest of the time. If the quota
+   does run out, wait for the reset rather than hammering a closed door. */
+const FAST = 5000, SLOW = 60000, HOT_WINDOW = 120000;
+let timer = null;
+
+function nextDelay() {
+  const t = now();
+  if (remaining === 0 && resetAt > t) return Math.min(resetAt - t + 1000, 15 * 60000);
+
+  // How close is the nearest countdown to firing?
+  const targets = projects.map(p => statusOf(p).target).filter(Boolean).map(d => +d - t).filter(ms => ms > -5000);
+  const soonest = targets.length ? Math.min(...targets) : Infinity;
+  const hot = soonest < HOT_WINDOW;
+
+  // Keep a reserve so a burst near a release cannot strand the page at zero.
+  if (hot && (remaining === null || remaining > 10)) return FAST;
+  return SLOW;
+}
+
+function schedule() {
+  clearTimeout(timer);
+  if (document.hidden) return;                 // resumed by visibilitychange
+  timer = setTimeout(load, nextDelay());
+}
+
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+
+// Small status line under the grid, so a throttled poll is visible but quiet.
+function note(msg) {
+  let el = $('#note');
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'note';
+    el.className = 'hint';
+    el.style.cssText = 'text-align:center;margin-top:22px';
+    $('#grid').after(el);
+  }
+  el.textContent = msg ? '⚠ ' + msg : '';
+}
 
 function render() {
   const grid = $('#grid'), state = $('#state');
