@@ -231,15 +231,20 @@ function unlock(btn, id, released) {
   }
   if (btn.hasAttribute('href')) return;
 
-  const url = links.get(id);
-  if (url) {
-    btn.removeAttribute('disabled');
-    btn.href = url;
-    btn.target = '_blank';
-    btn.rel = 'noopener';
-    btn.textContent = btn.dataset.label;
-    return;
-  }
+let url = links.get(id);
+
+if (url && !/^https?:\/\//i.test(url)) {
+  url = 'https://' + url;
+}
+
+if (url) {
+  btn.removeAttribute('disabled');
+  btn.href = url;
+  btn.target = '_blank';
+  btn.rel = 'noopener';
+  btn.textContent = btn.dataset.label;
+  return;
+}
   if (asked.has(id)) return;
   asked.add(id);
   btn.textContent = 'Unlocking…';
