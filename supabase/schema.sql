@@ -175,5 +175,21 @@ revoke execute on function public.check_code(text) from anon, authenticated;
 
 -- ---------------------------------------------------------------- realtime
 
-alter publication supabase_realtime add table public.games;
-alter publication supabase_realtime add table public.game_updates;
+-- Adding a table that is already published raises 42710, which would abort a
+-- re-run of this script, so each one is added only if it is missing.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'games'
+  ) then
+    alter publication supabase_realtime add table public.games;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'game_updates'
+  ) then
+    alter publication supabase_realtime add table public.game_updates;
+  end if;
+end $$;
