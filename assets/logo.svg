@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Jakub's Upcoming Games logo">
+  <defs>
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff2b3d"/>
+      <stop offset="1" stop-color="#8b0016"/>
+    </linearGradient>
+  </defs>
+  <path d="M60 4 108 30v60L60 116 12 90V30z" fill="url(#lg)"/>
+  <path d="M60 12 101 34v52L60 108 19 86V34z" fill="#0d0d0f"/>
+  <!-- stylised J / controller -->
+  <rect x="36" y="52" width="48" height="26" rx="13" fill="none" stroke="#ff2b3d" stroke-width="5"/>
+  <rect x="44" y="63" width="12" height="4" rx="2" fill="#fff"/>
+  <rect x="48" y="59" width="4" height="12" rx="2" fill="#fff"/>
+  <circle cx="70" cy="61" r="3.2" fill="#ff2b3d"/>
+  <circle cx="76" cy="69" r="3.2" fill="#fff"/>
+  <path d="M56 26h18v14a10 10 0 0 1-10 10h-2" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+</svg>

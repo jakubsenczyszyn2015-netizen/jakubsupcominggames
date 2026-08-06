@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jakub's Upcoming Sites/Games</title>
+<meta name="description" content="Countdowns to Jakub's upcoming games and sites.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <a class="brand" href="#" data-go="games">
+      <img src="assets/logo.svg" alt="">
+      <span>
+        <h1>Jakub's <span>Upcoming</span> Sites/Games</h1>
+        <small>Countdown Hub</small>
+      </span>
+    </a>
+    <div class="spacer"></div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="games">Games/Sites</button>
+      <button class="tab" data-tab="admin">Admin</button>
+    </nav>
+    <button class="icon-btn" id="theme" title="Toggle dark / light" aria-label="Toggle theme">🌙</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ GAMES / SITES ============ -->
+  <section class="panel active" id="panel-games">
+    <div class="hero">
+      <h2>Something <em>new</em> is loading.</h2>
+      <p>Every project below counts down to its release. When the timer hits zero the button unlocks — play it right here on GitHub Pages, or grab the download.</p>
+    </div>
+
+    <div id="state" class="empty"><div class="spin"></div>Loading projects from GitHub Issues…</div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <!-- ============ ADMIN ============ -->
+  <section class="panel" id="panel-admin">
+
+    <div class="lock box" id="lock">
+      <span class="padlock">🔒</span>
+      <h2 style="margin:0 0 6px">Admin access</h2>
+      <p class="hint">Enter the admin code to manage countdowns.</p>
+      <label for="code">Access code</label>
+      <input id="code" type="password" placeholder="••••••••" autocomplete="off">
+      <div style="height:14px"></div>
+      <button class="btn" id="unlock" style="width:100%;justify-content:center">Unlock</button>
+      <div class="msg err" id="lockmsg">Wrong code. Try again.</div>
+    </div>
+
+    <div id="admin" style="display:none">
+      <div class="hero" style="padding-top:36px">
+        <h2>Admin <em>panel</em></h2>
+        <p>Create a project with a release countdown, or edit an existing one. Data lives in this repository's GitHub Issues.</p>
+      </div>
+
+      <div class="box">
+        <h3 style="margin-top:0">Project details</h3>
+        <div class="two">
+          <div>
+            <label for="f-title">Name</label>
+            <input id="f-title" placeholder="Neon Drift">
+          </div>
+          <div>
+            <label for="f-kind">Type</label>
+            <select id="f-kind">
+              <option value="game">Game</option>
+              <option value="site">Site</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="f-desc">Description</label>
+        <textarea id="f-desc" placeholder="A short pitch for the project."></textarea>
+
+        <div class="two">
+          <div>
+            <label for="f-date">Release date &amp; time (your local time)</label>
+            <input id="f-date" type="datetime-local">
+          </div>
+          <div>
+            <label for="f-action">Button on release</label>
+            <select id="f-action">
+              <option value="play">Open / Play</option>
+              <option value="download">Download</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="f-url">Link (GitHub Pages URL or download URL)</label>
+        <input id="f-url" placeholder="https://jakubsenczyszyn2015-netizen.github.io/neon-drift/">
+
+        <div style="height:20px"></div>
+        <div class="row">
+          <button class="btn" id="make">Build entry</button>
+          <button class="btn ghost" id="clear">Clear form</button>
+        </div>
+        <div class="msg err" id="formmsg"></div>
+      </div>
+
+      <div class="box" id="result" style="margin-top:20px;display:none">
+        <h3 style="margin-top:0">Publish it</h3>
+        <p class="hint">Two ways — pick whichever you like. Option A needs nothing but your GitHub login.</p>
+
+        <h4 style="margin-bottom:6px">A · One click (recommended)</h4>
+        <p class="hint">Opens a pre-filled GitHub issue. Just press <b>Create</b> — the site picks it up on the next refresh.</p>
+        <a class="btn" id="openissue" target="_blank" rel="noopener">Open pre-filled issue ↗</a>
+
+        <h4 style="margin-bottom:6px;margin-top:26px">B · Post directly with a token</h4>
+        <p class="hint">Paste a fine-grained personal access token with <b>Issues: read &amp; write</b> on this repo. It is used for this one request only and is never stored.</p>
+        <input id="token" type="password" placeholder="github_pat_…" autocomplete="off">
+        <div style="height:12px"></div>
+        <div class="row">
+          <button class="btn" id="post">Create issue via API</button>
+          <button class="btn ghost" id="copy">Copy issue body</button>
+        </div>
+        <div class="msg" id="postmsg"></div>
+
+        <h4 style="margin-bottom:6px;margin-top:26px">Issue body</h4>
+        <pre class="out" id="body"></pre>
+      </div>
+
+      <div class="box" id="existing" style="margin-top:20px">
+        <h3 style="margin-top:0">Existing entries</h3>
+        <p class="hint">Loaded from GitHub Issues. Use <b>Edit on GitHub</b> to change a countdown date or link, or close the issue to remove the entry from the site.</p>
+        <div id="list"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Built by Jakub · data from
+    <a href="https://github.com/jakubsenczyszyn2015-netizen/jakubsupcominggames/issues" style="color:var(--red)">GitHub Issues</a>
+  </footer>
+</div>
+
+<button id="top" title="Back to top">↑</button>
+<script src="app.js"></script>
+</body>
+</html>
