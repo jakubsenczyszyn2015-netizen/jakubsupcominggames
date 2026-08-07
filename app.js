@@ -221,6 +221,24 @@ setInterval(tick, 1000);
    Before that the server refuses to hand it over, so there is nothing in the
    page — or reachable from it — that would let someone start early. */
 const asked = new Set();
+
+// Accept a bare hostname as well as a full URL.
+function fullUrl(u) {
+  u = (u || '').trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^(javascript|data|vbscript):/i.test(u)) return '';
+  return 'https://' + u.replace(/^\/+/, '');
+}
+
+function applyLink(btn, url) {
+  btn.removeAttribute('disabled');
+  btn.href = url;
+  btn.target = '_blank';
+  btn.rel = 'noopener';
+  btn.textContent = btn.dataset.label;
+}
+
 function unlock(btn, id, released) {
   if (!btn) return;
   if (!released) {
@@ -231,27 +249,25 @@ function unlock(btn, id, released) {
   }
   if (btn.hasAttribute('href')) return;
 
-let url = links.get(id);
+  const known = fullUrl(links.get(id));
+  if (known) { applyLink(btn, known); return; }
 
-if (url && !/^https?:\/\//i.test(url)) {
-  url = 'https://' + url;
-}
-
-if (url) {
-  btn.removeAttribute('disabled');
-  btn.href = url;
-  btn.target = '_blank';
-  btn.rel = 'noopener';
-  btn.textContent = btn.dataset.label;
-  return;
-}
   if (asked.has(id)) return;
   asked.add(id);
   btn.textContent = 'Unlocking…';
   fetchLink(id).then(u => {
     asked.delete(id);
-    if (u) { links.set(id, u); tick(); }
-    else { btn.setAttribute('disabled', ''); btn.textContent = 'Link coming soon'; }
+    const url = fullUrl(u);
+    if (!url) {
+      btn.setAttribute('disabled', '');
+      btn.textContent = 'Link coming soon';
+      return;
+    }
+    links.set(id, url);
+    // Apply it to every button for this project directly. Going back through
+    // tick() would not work: once a countdown finishes its .cd element is
+    // replaced by the "out now" banner, so tick() no longer visits the card.
+    $$(`[data-play="${id}"]`).forEach(b => applyLink(b, url));
   });
 }
 
