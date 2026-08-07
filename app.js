@@ -6,7 +6,7 @@ import {
   saveGame, addUpdate, deleteGame, adminGetLink
 } from './data.js';
 
-const ADMIN_CODE = 'jfbbb123';   // gates the UI; the database checks it again on every write
+const ADMIN_CODE = 'jakjak123';  // gates the UI; the database checks it again on every write
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];

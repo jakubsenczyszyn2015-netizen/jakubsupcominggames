@@ -45,11 +45,13 @@ create table if not exists public.app_settings (
   value text not null
 );
 
--- The admin code. Change it here and the site follows — it is compared
--- server-side, so editing this row is what actually controls write access.
+-- The admin code. This row is what actually controls write access — it is
+-- compared server-side on every admin_* call. Re-running this script applies
+-- the value below, so change it here (and in ADMIN_CODE in app.js, which gates
+-- the UI) rather than editing the row by hand.
 insert into public.app_settings (key, value)
-values ('admin_code', 'jfbbb123')
-on conflict (key) do nothing;
+values ('admin_code', 'jakjak123')
+on conflict (key) do update set value = excluded.value;
 
 -- ---------------------------------------------------------------- security
 

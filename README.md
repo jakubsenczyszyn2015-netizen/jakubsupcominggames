@@ -75,8 +75,13 @@ that re-check the code server-side, so the tables cannot be written to directly.
 **Lock admin** forgets the code and puts the gate back, so it has to be typed in again. The
 panel also locks itself when the tab is closed — the code is only ever held for the session.
 
-Change the code by updating the `admin_code` row in `app_settings` **and** `ADMIN_CODE` in
-`app.js` — the database is what enforces it, the constant only controls the UI.
+To change the code, edit it in **both** places and re-run `schema.sql`:
+
+- `admin_code` in `supabase/schema.sql` — what the database enforces
+- `ADMIN_CODE` in `app.js` — what the UI gate checks
+
+They must match. Re-running the script overwrites the stored value, so the file is the
+source of truth; don't edit the row by hand or the next run will undo it.
 
 **Understand the limit:** the code is typed into the browser and sent with each write, so
 anyone who reads the JavaScript can find it and write to the database. It stops casual
