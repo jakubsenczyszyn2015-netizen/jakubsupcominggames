@@ -75,13 +75,32 @@ that re-check the code server-side, so the tables cannot be written to directly.
 **Lock admin** forgets the code and puts the gate back, so it has to be typed in again. The
 panel also locks itself when the tab is closed — the code is only ever held for the session.
 
-To change the code, edit it in **both** places and re-run `schema.sql`:
+### The code is not in this repository
 
-- `admin_code` in `supabase/schema.sql` — what the database enforces
-- `ADMIN_CODE` in `app.js` — what the UI gate checks
+This repo is public, so anything committed to it is readable by anyone — including in the
+git history, forever. The code therefore lives **only in the database**, in the `admin_code`
+row of `app_settings`. Nothing in the published site reveals it: unlocking calls
+`verify_code()`, which answers true or false and never sends the code back.
 
-They must match. Re-running the script overwrites the stored value, so the file is the
-source of truth; don't edit the row by hand or the next run will undo it.
+Set or change it in the Supabase SQL editor. Do not put it in a file:
+
+```sql
+insert into public.app_settings (key, value)
+values ('admin_code', 'your code here')
+on conflict (key) do update set value = excluded.value;
+```
+
+Re-running `schema.sql` will not overwrite it once set.
+
+### What this does and does not protect
+
+The code still travels from the browser with each write, so someone using the admin tab on a
+shared machine, or watching network traffic on one, could capture it. It is no longer
+*published*, which is the main thing, but it is a shared secret rather than an account.
+
+Supabase Auth is the real fix, and the schema is ready for it: replace the `check_code(code)`
+call in each `admin_*` function with a check on `auth.uid()`, and swap the code prompt for a
+login. Then nothing secret passes through the browser at all.
 
 **Understand the limit:** the code is typed into the browser and sent with each write, so
 anyone who reads the JavaScript can find it and write to the database. It stops casual

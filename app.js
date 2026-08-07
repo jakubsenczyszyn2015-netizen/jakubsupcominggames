@@ -3,10 +3,13 @@
 
 import {
   configured, now, syncClock, fetchProjects, fetchLink, addHype, removeHype, subscribe,
-  saveGame, addUpdate, deleteGame, adminGetLink
+  verifyCode, saveGame, addUpdate, deleteGame, adminGetLink
 } from './data.js';
 
-const ADMIN_CODE = 'jakjak123';  // gates the UI; the database checks it again on every write
+/* There is deliberately no admin code in this file. This repository is public,
+   so a code committed here — or to any earlier commit — can be read by anyone.
+   The code lives only in the database, and verify_code() answers yes or no
+   without ever sending it back. */
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -441,16 +444,43 @@ const lockBox = $('#lock');
 let code = '';                          // held in memory for the session only
 let editing = null;                     // id of the project being edited
 
-function tryUnlock() {
-  if ($('#code').value.trim() === ADMIN_CODE) {
-    code = $('#code').value.trim();
-    lockBox.style.display = 'none';
-    $('#admin').style.display = 'block';
-    sessionStorage.setItem('admin', code);
-    renderAdminList();
-  } else {
-    $('#lockmsg').classList.add('show');
-    lockBox.classList.remove('shake'); void lockBox.offsetWidth; lockBox.classList.add('shake');
+function denied(msg) {
+  const m = $('#lockmsg');
+  m.textContent = msg;
+  m.classList.add('show');
+  lockBox.classList.remove('shake'); void lockBox.offsetWidth; lockBox.classList.add('shake');
+}
+
+function openAdmin() {
+  lockBox.style.display = 'none';
+  $('#admin').style.display = 'block';
+  $('#lockmsg').classList.remove('show');
+  renderAdminList();
+}
+
+// The database decides, not this file — the code is not in the source to compare against.
+async function tryUnlock() {
+  const entered = $('#code').value.trim();
+  if (!entered) return denied('Enter the code.');
+
+  const btn = $('#unlock');
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    if (await verifyCode(entered)) {
+      code = entered;
+      sessionStorage.setItem('admin', code);
+      openAdmin();
+    } else {
+      denied('Wrong code. Try again.');
+    }
+  } catch (err) {
+    denied(/function/i.test(err.message)
+      ? 'The database is missing verify_code() — re-run supabase/schema.sql.'
+      : 'Could not check the code: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Unlock';
   }
 }
 $('#unlock').addEventListener('click', tryUnlock);

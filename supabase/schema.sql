@@ -45,13 +45,21 @@ create table if not exists public.app_settings (
   value text not null
 );
 
--- The admin code. This row is what actually controls write access — it is
--- compared server-side on every admin_* call. Re-running this script applies
--- the value below, so change it here (and in ADMIN_CODE in app.js, which gates
--- the UI) rather than editing the row by hand.
+-- The admin code lives here and ONLY here. It is never written into the site's
+-- source, because this repository is public and anything committed to it can be
+-- read by anyone — including in the git history, forever.
+--
+-- This inserts a placeholder that will not let anyone in. Set the real code by
+-- running this in the Supabase SQL editor (never commit it):
+--
+--   insert into public.app_settings (key, value) values ('admin_code', 'your code here')
+--   on conflict (key) do update set value = excluded.value;
+--
+-- "do nothing" below means re-running this script will not overwrite the code
+-- once you have set it.
 insert into public.app_settings (key, value)
-values ('admin_code', 'jakjak123')
-on conflict (key) do update set value = excluded.value;
+values ('admin_code', 'set-me-in-the-sql-editor')
+on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------- security
 
@@ -93,6 +101,14 @@ begin
   end if;
   return (select url from game_links where game_id = p_game);
 end $$;
+
+-- Unlocks the admin UI. Returns only true or false — the stored code is never
+-- sent to the browser, so the site can gate its admin tab without the code
+-- appearing anywhere in the published source.
+create or replace function public.verify_code(code text)
+returns boolean language sql security definer set search_path = public as $$
+  select code = (select value from app_settings where key = 'admin_code');
+$$;
 
 -- Server clock, so every visitor counts down against the same time.
 create or replace function public.server_now()
@@ -180,6 +196,7 @@ revoke all on public.game_links, public.app_settings from anon, authenticated;
 
 grant execute on function public.get_link(uuid)          to anon, authenticated;
 grant execute on function public.server_now()            to anon, authenticated;
+grant execute on function public.verify_code(text)       to anon, authenticated;
 grant execute on function public.add_hype(uuid)          to anon, authenticated;
 grant execute on function public.remove_hype(uuid)       to anon, authenticated;
 grant execute on function public.admin_save_game(text, uuid, text, text, text, timestamptz, text, text) to anon, authenticated;

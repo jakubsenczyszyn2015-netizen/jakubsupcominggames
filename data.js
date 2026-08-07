@@ -97,6 +97,15 @@ export function subscribe(onChange) {
 
 /* ---------------- writing (admin) ---------------- */
 
+// Checks the code against the database. The stored code never leaves the
+// server — this only ever answers true or false — so nothing in the published
+// source reveals it.
+export async function verifyCode(code) {
+  const { data, error } = await supa.rpc('verify_code', { code });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
+
 export async function saveGame(code, g) {
   const { data, error } = await supa.rpc('admin_save_game', {
     code,
