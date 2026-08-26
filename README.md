@@ -111,9 +111,3 @@ shared machine, or watching network traffic on one, could capture it. It is no l
 Supabase Auth is the real fix, and the schema is ready for it: replace the `check_code(code)`
 call in each `admin_*` function with a check on `auth.uid()`, and swap the code prompt for a
 login. Then nothing secret passes through the browser at all.
-
-**Understand the limit:** the code is typed into the browser and sent with each write, so
-anyone who reads the JavaScript can find it and write to the database. It stops casual
-tampering, not a determined person. Supabase Auth with a real login would fix that properly,
-and the schema is ready for it — swap the `check_code()` call in each `admin_*` function for
-`auth.uid() is not null`.
