@@ -35,10 +35,10 @@
   <section class="panel active" id="panel-games">
     <div class="hero">
       <h2>Something <em>new</em> is loading.</h2>
-      <p>Every project below counts down to its release. When the timer hits zero the button unlocks — play it right here on GitHub Pages, or grab the download.</p>
+      <p>Every project below counts down to its release. When the timer hits zero the button unlocks — play it right here, or grab the download.</p>
     </div>
 
-    <div id="state" class="empty"><div class="spin"></div>Loading projects from GitHub Issues…</div>
+    <div id="state" class="empty"><div class="spin"></div>Loading projects…</div>
     <div class="grid" id="grid"></div>
   </section>
 
@@ -129,6 +129,16 @@
         </div>
         <label for="f-notes">What's new</label>
         <textarea id="f-notes" placeholder="New track, fixed the physics bug."></textarea>
+        <p class="hint" id="uhint" style="margin-top:8px">Leave all three blank to change the project
+        without announcing anything.</p>
+
+        <div id="upanel" style="display:none">
+          <div class="row" style="margin-top:14px">
+            <button class="btn ghost" id="ushow">Show previous updates</button>
+            <button class="btn ghost" id="ucancel" style="display:none">Cancel update edit</button>
+          </div>
+          <div id="ulist" class="ulist" style="display:none"></div>
+        </div>
 
         <div style="height:20px"></div>
         <div class="row">

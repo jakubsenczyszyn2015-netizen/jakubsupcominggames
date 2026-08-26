@@ -50,6 +50,16 @@ Add an update to announce a patch. Past updates render as a "What's new" changel
 with the newest version as a badge; an update dated in the future turns the countdown into a
 *next update* countdown, and the play button stays unlocked because the project is already out.
 
+### Managing updates
+
+Editing a project reveals **Show previous updates**: every update it has, newest first, each
+one editable or deletable. Scheduled ones (dated in the future) are marked, since those are
+what drive a "next update" countdown.
+
+Editing an update loads it into the update fields, and saving changes that update rather than
+adding another. **Cancel update edit** backs out. Leave all three update fields blank and
+saving changes only the project — no update is announced.
+
 ### Hype & notifications
 
 One **🔥 Hype & notify me** button per card. It adds to a shared counter everyone can see, and

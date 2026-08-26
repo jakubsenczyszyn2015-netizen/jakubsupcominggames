@@ -3,7 +3,7 @@
 
 import {
   configured, now, syncClock, fetchProjects, fetchLink, addHype, removeHype, subscribe,
-  verifyCode, saveGame, addUpdate, deleteGame, adminGetLink
+  verifyCode, saveGame, addUpdate, editUpdate, deleteUpdate, deleteGame, adminGetLink
 } from './data.js';
 
 /* There is deliberately no admin code in this file. This repository is public,
@@ -71,6 +71,7 @@ async function refresh() {
     detectEvents();
     render();
     renderAdminList();
+    if (editing && $('#ulist').style.display !== 'none') renderUpdateList();
     bootstrapped = true;
   } catch (err) {
     if (projects.length) { note(err.message); return; }
@@ -443,6 +444,7 @@ function burst(btn) {
 const lockBox = $('#lock');
 let code = '';                          // held in memory for the session only
 let editing = null;                     // id of the project being edited
+let editingUpdate = null;               // id of the update being edited, if any
 
 function denied(msg) {
   const m = $('#lockmsg');
@@ -529,14 +531,19 @@ $('#save').addEventListener('click', async () => {
     });
 
     const ver = $('#f-ver').value.trim(), notes = $('#f-notes').value.trim();
-    if (ver || notes) {
-      await addUpdate(code, id, {
-        version: ver,
-        date: new Date($('#f-udate').value || Date.now()).toISOString(),
-        notes
-      });
+    const udate = $('#f-udate').value;
+    const u = { version: ver, date: new Date(udate || Date.now()).toISOString(), notes };
+
+    if (editingUpdate) {
+      await editUpdate(code, editingUpdate, u);           // changing an existing one
+    } else if (ver || notes || udate) {
+      await addUpdate(code, id, u);                       // announcing a new one
     }
-    flash(editing ? 'Saved.' : 'Published.', true);
+    // With all three update fields blank and none being edited, nothing is
+    // announced — editing a description no longer publishes a stray update.
+
+    const wasEditing = editing;
+    flash(editingUpdate ? 'Update saved.' : wasEditing ? 'Saved.' : 'Published.', true);
     resetForm();
     refresh();
   } catch (err) {
@@ -552,6 +559,19 @@ function resetForm() {
   editing = null;
   $('#save').textContent = 'Publish';
   $('#editing').textContent = '';
+  $('#upanel').style.display = 'none';
+  $('#ulist').style.display = 'none';
+  $('#ushow').textContent = 'Show previous updates';
+  clearUpdateEdit();
+}
+
+// Stop editing a particular update, without touching the project fields.
+function clearUpdateEdit() {
+  editingUpdate = null;
+  ['#f-ver', '#f-notes', '#f-udate'].forEach(s => $(s).value = '');
+  $('#ucancel').style.display = 'none';
+  $('#uhint').textContent = 'Leave all three blank to change the project without announcing anything.';
+  renderUpdateList();
 }
 
 async function editGame(id) {
@@ -565,9 +585,85 @@ async function editGame(id) {
   $('#f-action').value = p.action;
   $('#save').textContent = 'Save changes';
   $('#editing').textContent = `Editing “${p.title}”`;
+  // Clear the update fields, so editing a project does not carry whatever was
+  // typed there before into a brand new update.
+  clearUpdateEdit();
+  $('#upanel').style.display = 'block';
   try { $('#f-url').value = await adminGetLink(code, id); } catch (_) { $('#f-url').value = ''; }
   $('#f-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+/* ---------------- managing updates ----------------
+   Every update for the project being edited, newest first, each one editable
+   or removable. Future-dated ones are marked, since those are the ones driving
+   a "next update" countdown on the card. */
+function renderUpdateList() {
+  const box = $('#ulist');
+  if (!box || !editing) return;
+  const p = projects.find(x => x.id === editing);
+  const ups = p ? p.updates : [];
+
+  if (!ups.length) {
+    box.innerHTML = '<p class="hint">No updates announced for this project yet.</p>';
+    return;
+  }
+  box.innerHTML = ups.map(u => {
+    const future = u.date && +u.date > now();
+    return `<div class="arow${editingUpdate === u.id ? ' editing' : ''}">
+      <div>
+        <b>${u.version ? 'v' + esc(u.version) : 'Update'}</b>
+        ${future ? '<span class="kind ver">scheduled</span>' : ''}
+        <div class="hint">${u.date ? u.date.toLocaleString() : 'No date'}${u.notes ? ' · ' + esc(u.notes) : ''}</div>
+      </div>
+      <div class="row">
+        <button class="btn ghost" data-uedit="${u.id}">Edit</button>
+        <button class="btn ghost danger" data-udel="${u.id}">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  $$('[data-uedit]', box).forEach(b => b.addEventListener('click', () => startUpdateEdit(b.dataset.uedit)));
+  $$('[data-udel]', box).forEach(b => b.addEventListener('click', () => removeUpdate(b.dataset.udel)));
+}
+
+function startUpdateEdit(uid) {
+  const p = projects.find(x => x.id === editing);
+  const u = p && p.updates.find(x => x.id === uid);
+  if (!u) return;
+  editingUpdate = uid;
+  $('#f-ver').value = u.version;
+  $('#f-notes').value = u.notes;
+  $('#f-udate').value = localInput(u.date);
+  $('#ucancel').style.display = '';
+  $('#uhint').textContent = 'Editing an existing update — saving changes it instead of adding another.';
+  renderUpdateList();
+  $('#f-ver').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function removeUpdate(uid) {
+  const p = projects.find(x => x.id === editing);
+  const u = p && p.updates.find(x => x.id === uid);
+  if (!confirm(`Delete ${u && u.version ? 'v' + u.version : 'this update'}? This cannot be undone.`)) return;
+  try {
+    await deleteUpdate(code, uid);
+    if (editingUpdate === uid) clearUpdateEdit();
+    flash('Update deleted.', true);
+    await refresh();
+    renderUpdateList();
+  } catch (err) {
+    flash('Failed: ' + err.message, false);
+  }
+}
+
+$('#ushow').addEventListener('click', () => {
+  const box = $('#ulist');
+  const show = box.style.display === 'none';
+  box.style.display = show ? 'block' : 'none';
+  $('#ushow').textContent = show ? 'Hide previous updates' : 'Show previous updates';
+  if (show) renderUpdateList();
+});
+
+$('#ucancel').addEventListener('click', clearUpdateEdit);
 
 async function removeGame(id) {
   const p = projects.find(x => x.id === id);

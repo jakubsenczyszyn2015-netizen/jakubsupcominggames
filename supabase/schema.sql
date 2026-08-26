@@ -175,6 +175,26 @@ begin
   return uid;
 end $$;
 
+create or replace function public.admin_edit_update(
+  code text, p_id uuid, p_version text, p_released timestamptz, p_notes text
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform check_code(code);
+  update game_updates
+     set version  = coalesce(p_version, ''),
+         released = coalesce(p_released, released),
+         notes    = coalesce(p_notes, '')
+   where id = p_id;
+  if not found then raise exception 'No such update'; end if;
+end $$;
+
+create or replace function public.admin_delete_update(code text, p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform check_code(code);
+  delete from game_updates where id = p_id;
+end $$;
+
 create or replace function public.admin_delete_game(code text, p_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
@@ -202,6 +222,8 @@ grant execute on function public.remove_hype(uuid)       to anon, authenticated;
 grant execute on function public.admin_save_game(text, uuid, text, text, text, timestamptz, text, text) to anon, authenticated;
 grant execute on function public.admin_add_update(text, uuid, text, timestamptz, text) to anon, authenticated;
 grant execute on function public.admin_delete_game(text, uuid) to anon, authenticated;
+grant execute on function public.admin_edit_update(text, uuid, text, timestamptz, text) to anon, authenticated;
+grant execute on function public.admin_delete_update(text, uuid)   to anon, authenticated;
 grant execute on function public.admin_get_link(text, uuid)    to anon, authenticated;
 revoke execute on function public.check_code(text) from anon, authenticated;
 

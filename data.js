@@ -47,6 +47,7 @@ export async function fetchProjects() {
   (updates || []).forEach(u => {
     if (!byGame.has(u.game_id)) byGame.set(u.game_id, []);
     byGame.get(u.game_id).push({
+      id: u.id,
       version: u.version || '',
       date: u.released ? new Date(u.released) : null,
       notes: u.notes || ''
@@ -129,6 +130,22 @@ export async function addUpdate(code, gameId, u) {
     p_released: u.date,
     p_notes: u.notes
   });
+  if (error) throw new Error(error.message);
+}
+
+export async function editUpdate(code, id, u) {
+  const { error } = await supa.rpc('admin_edit_update', {
+    code,
+    p_id: id,
+    p_version: u.version,
+    p_released: u.date,
+    p_notes: u.notes
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteUpdate(code, id) {
+  const { error } = await supa.rpc('admin_delete_update', { code, p_id: id });
   if (error) throw new Error(error.message);
 }
 
